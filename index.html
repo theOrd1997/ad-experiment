@@ -32,11 +32,11 @@
 
 <script>
 /* ===== 0) 설정 ===== */
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbywBmhFjK3CTJ1zqqkUf0n6XtDBwpa8-O5fUPYkZeYLfRUmXO5TdMMiESTjcic3AMphRg/exec";
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbywBmhFjK3CTJ1zqqkUf0n6XtDBwpa8-O5fUPYkZeYLfRUmXO5TdMMiESTjcic3AMphRg/execc";
 const WATCH_THRESHOLD = 0.98; // 98% 이상 시청해야 완료 처리
 const videos = [
-  { id: "high", label: "영상 A", src: "https://www.dropbox.com/scl/fi/bbmr9chryaiwrgbg64biz/high_originality.mp4?raw=1" },
-  { id: "low",  label: "영상 B", src: "https://www.dropbox.com/scl/fi/gpd95qhvwid3xxv9hbyur/low_originality.mp4?raw=1" }
+  { id: "high", label: "영상 A", src: "https://www.dropbox.com/scl/fi/bbmr9chryaiwrgbg64biz/high_originality.mp4?rlkey=6pn4584iwg7as5y89aht7k5ys&st=a49pald0&raw=1" },
+  { id: "low",  label: "영상 B", src: "https://www.dropbox.com/scl/fi/gpd95qhvwid3xxv9hbyur/low_originality.mp4?rlkey=1wvalrivbwtd6v95onarxlf5b&st=ow4mi1xb&raw=1" }
 ];
 const questions = [
   "이 광고는 전반적으로 잘 만들어졌다.",
@@ -80,7 +80,10 @@ function renderVideoStep(item, index, total){
     if (duration > 0){
       const ratio = Math.min(watched.size / Math.ceil(duration), 1);
       bar.style.width = (ratio*100).toFixed(1) + '%';
+
+      // nearEnd 허용 (사용자 경험 개선)
       const nearEnd = duration > 0 && (duration - lastAllowedTime) <= 2;
+
       if (ratio >= WATCH_THRESHOLD || nearEnd){
         nextBtn.disabled = false;
         msg.className = 'ok';
@@ -145,18 +148,8 @@ function renderSurveyStep(item, index){
   stage.appendChild(form);
 }
 
-/* ===== 4) JSONP 제출 ===== */
-// JSONP 콜백: 성공/실패 UI 업데이트
-function __jsonpSubmitCallback__(resp){
-  if (resp && resp.ok) {
-    stage.innerHTML = `<div class="card"><p class="ok">제출이 완료되었습니다. 감사합니다!</p><div class="dim">응답 ID: ${resp.id || '—'}</div></div>`;
-  } else {
-    const msg = (resp && resp.error) ? resp.error : '서버 오류';
-    stage.innerHTML = `<div class="card"><p class="warn">제출 중 오류가 발생했습니다.</p><pre class="dim" style="white-space:pre-wrap">${msg}</pre></div>`;
-  }
-}
-
-function submitAll(){
+/* ===== 4) 제출(Apps Script로 POST) ===== */
+async function submitAll(){
   const payload = {
     sessionId,
     userAgent: navigator.userAgent,
@@ -164,35 +157,28 @@ function submitAll(){
     answers,
     timestamp: new Date().toISOString()
   };
-
   stage.innerHTML = '<p>제출 중…</p>';
+  try{
+    // ★ preflight 회피: 폼 인코딩 + data= 에 JSON 문자열
+    const res = await fetch(WEB_APP_URL, {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'
+      },
+      body: 'data=' + encodeURIComponent(JSON.stringify(payload))
+    });
 
-  // JSONP 스크립트 주입
-  const cbName = '__jsonpSubmitCallback__';
-  const src = WEB_APP_URL
-    + '?callback=' + encodeURIComponent(cbName)
-    + '&data=' + encodeURIComponent(JSON.stringify(payload))
-    + '&_ts=' + Date.now(); // 캐시 방지
+    if (!res.ok) {
+      const txt = await res.text().catch(()=> '');
+      throw new Error(`서버 오류 (status ${res.status}) ${txt}`);
+    }
 
-  const s = document.createElement('script');
-  s.src = src;
-  s.async = true;
-
-  // 로딩 실패 대비
-  const onErr = () => {
-    stage.innerHTML = `<div class="card"><p class="warn">제출 스크립트 로드 실패(네트워크/차단 가능성)</p><pre class="dim">URL: ${src}</pre></div>`;
-  };
-  s.onerror = onErr;
-
-  // 타임아웃 대비(10초)
-  const t = setTimeout(()=>{
-    onErr();
-    document.head.removeChild(s);
-  }, 10000);
-
-  s.onload = () => clearTimeout(t);
-
-  document.head.appendChild(s);
+    // Apps Script가 JSON 응답을 줌
+    const data = await res.json().catch(() => ({}));
+    stage.innerHTML = `<div class="card"><p class="ok">제출이 완료되었습니다. 감사합니다!</p><div class="dim">응답 ID: ${data.id || '—'}</div></div>`;
+  }catch(err){
+    stage.innerHTML = `<div class="card"><p class="warn">제출 중 오류가 발생했습니다. 인터넷 연결을 확인하고 다시 시도해주세요.</p><pre class="dim" style="white-space:pre-wrap">${String(err)}</pre></div>`;
+  }
 }
 
 /* ===== 5) 시작: 순서 랜덤 후 1번 영상부터 ===== */
