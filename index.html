@@ -3,140 +3,197 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>사전 설문: 인구통계 (나이·성별)</title>
+<title>광고 영상 시청 반응 설문</title>
 <style>
   :root { --gap: 14px; }
-  *, *::before, *::after { box-sizing: border-box; }
-  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; line-height: 1.6; margin: 24px auto; max-width: 720px; padding: 0 16px; background:#f7f8fb;}
-  h1 { font-size: 1.8rem; margin: 0 0 8px; }
-  .muted{ color:#667085; }
-  .card { border:1px solid #e6e8ec; border-radius:16px; padding:20px; box-shadow:0 1px 6px rgba(0,0,0,.04); background:#fff; margin-top: var(--gap); }
-  .row  { display:grid; gap:8px; margin-top:12px; }
-  .label{ font-weight:700; }
-  .opt { display:flex; flex-wrap:wrap; gap:10px; margin-top:6px; }
-  .opt label{ display:flex; align-items:center; gap:8px; padding:8px 12px; border:1px solid #e6e8ec; border-radius:999px; cursor:pointer; background:#fafbff; }
-  input[type="number"], input[type="text"]{ width: 200px; padding:10px 12px; border:1px solid #d0d5dd; border-radius:10px; background:#fff; }
-  .hidden{ display:none !important; }
-  .ok{ color:#039855; }
-  .err{ color:#d92d20; }
-  .info{ color:#344054; }
-  button{ padding:12px 16px; border:0; border-radius:12px; background:#111827; color:#fff; font-weight:700; cursor:pointer; width: 100%; }
-  button[disabled]{ opacity:.6; cursor:not-allowed; }
-  .footer{ margin-top:16px; font-size:.9rem; color:#667085; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; line-height: 1.6; margin: 24px auto; max-width: 860px; padding: 0 16px; }
+  .card { border: 1px solid #ddd; border-radius: 14px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.03); margin-top: var(--gap); }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; background:#f2f2f2; font-size:.82rem; margin-right:6px;}
+  .video-wrap { display: grid; gap: 10px; }
+  video { width: 100%; max-height: 60vh; background:#000; border-radius:12px; }
+  .progress { height: 8px; background: #eee; border-radius: 999px; overflow: hidden; }
+  .progress > div { height: 100%; background: #2f6; width: 0%; transition: width .2s; }
+  .dim { color:#666; }
+  .ok { color:#0a7c0a; }
+  .warn { color:#b00; }
+  .btn { cursor:pointer; border:0; padding:10px 14px; border-radius:10px; background:#111; color:#fff; font-weight:600; }
+  .btn[disabled]{ opacity:.5; cursor:not-allowed; }
+  .q { margin: 14px 0; }
+  .likert { display:flex; gap:10px; flex-wrap:wrap; }
+  .likert label { border:1px solid #ddd; padding:6px 10px; border-radius:8px; cursor:pointer; }
+  .row { display:grid; gap:8px; }
 </style>
 </head>
 <body>
-  <h1>사전 설문: 인구통계 (나이·성별)</h1>
-  <p class="muted">본 설문은 연구 목적에 한해 사용되며, 응답은 익명으로 저장됩니다.</p>
+  <h1>광고 영상 시청 반응 설문</h1>
+  <p class="dim"><b>각 영상은 끝까지 시청</b>해야 설문으로 이동할 수 있어요.</p>
 
-  <!-- 응답 수신 전용 숨은 iframe (CORS 회피) -->
+  <!-- 숨은 iframe: 응답 수신용 -->
   <iframe name="sink" id="sink" style="display:none;"></iframe>
 
-  <div class="card">
-    <!-- ★ action에 Apps Script 웹앱의 최신 /exec URL을 넣으세요 -->
-    <form id="survey" action="https://script.google.com/macros/s/AKfycbxRphkBzMvzpU6JaxJljs6B_mh71cTehLD5wMIboOdRsI_YU4LNBgfKUmoEkM2saLl8Pw/exec"
-          method="POST" target="sink" onsubmit="return __safeSubmit(event)" novalidate>
-      <div class="row">
-        <div class="label">나이 <span class="muted">(숫자, 14–100)</span></div>
-        <input id="age" name="age" type="number" min="14" max="100" inputmode="numeric" placeholder="예: 24" required />
-      </div>
+  <!-- 숨은 form: 최종 제출용 (data=<JSON>) -->
+  <form id="submitForm" action="https://script.google.com/macros/s/AKfycbywBmhFjK3CTJ1zqqkUf0n6XtDBwpa8-O5fUPYkZeYLfRUmXO5TdMMiESTjcic3AMphRg/exec"
+        method="POST" target="sink" style="display:none;">
+    <input type="hidden" name="data" id="payload">
+  </form>
 
-      <div class="row">
-        <div class="label">성별</div>
-        <div class="opt" role="radiogroup" aria-label="성별">
-          <label><input type="radio" name="gender" value="male" required>남성</label>
-          <label><input type="radio" name="gender" value="female">여성</label>
-          <label><input type="radio" name="gender" value="nonbinary">논바이너리</label>
-          <label><input type="radio" name="gender" value="prefer_not">응답 거부</label>
-          <label><input type="radio" name="gender" value="other">기타</label>
-        </div>
-        <input id="gender_text" name="gender_text" class="hidden" type="text" placeholder="기타 선택 시 상세 입력" />
-      </div>
-
-      <!-- 사용자 에이전트(선택) -->
-      <input type="hidden" name="ua" id="ua" value="" />
-
-      <div class="row" style="margin-top:14px;">
-        <button id="submitBtn" type="submit">제출</button>
-        <div id="msg" class="info"></div>
-      </div>
-    </form>
-
-    <div class="footer">
-      제출 후 메시지가 보이지 않더라도, 스프레드시트에 행이 추가되면 저장은 성공입니다.
-    </div>
-  </div>
+  <div id="stage" class="card">로딩 중…</div>
 
 <script>
-(function(){
-  // 외부 스크립트 충돌 방지용 "방탄" 제출 루틴
-  const $ = sel => document.querySelector(sel);
-  const form = $('#survey');
-  const msg  = $('#msg');
-  const btn  = $('#submitBtn');
-  const genderText = $('#gender_text');
-  const sink = document.getElementById('sink');
+/* ===== 0) 설정 ===== */
+const WATCH_THRESHOLD = 0.98; // 98% 이상 시청해야 완료 처리
+const videos = [
+  { id: "high", label: "영상 A", src: "https://www.dropbox.com/scl/fi/bbmr9chryaiwrgbg64biz/high_originality.mp4?rlkey=6pn4584iwg7as5y89aht7k5ys&st=a49pald0&raw=1" },
+  { id: "low",  label: "영상 B", src: "https://www.dropbox.com/scl/fi/gpd95qhvwid3xxv9hbyur/low_originality.mp4?rlkey=1wvalrivbwtd6v95onarxlf5b&st=ow4mi1xb&raw=1" }
+];
+const questions = [
+  "이 광고는 전반적으로 잘 만들어졌다.",
+  "이 광고는 브랜드 제품을 잘 표현하였다.",
+  "이 광고는 브랜드와 잘 어울린다.",
+  "이 광고는 시각적 완성도가 높다."
+];
 
-  // UA 기록(선택)
-  document.getElementById('ua').value = navigator.userAgent;
+/* ===== 1) 유틸 ===== */
+const shuffle = arr => arr.map(v=>[Math.random(),v]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]);
+const stage = document.getElementById('stage');
+const sink  = document.getElementById('sink');
+const form  = document.getElementById('submitForm');
+const payloadInput = document.getElementById('payload');
+const sessionId = (crypto && crypto.getRandomValues) ? crypto.getRandomValues(new Uint32Array(4)).join('-') : String(Date.now());
 
-  // “기타” 선택 시 상세 입력 토글
-  document.addEventListener('change', () => {
-    const g = document.querySelector('input[name="gender"]:checked')?.value;
-    if (g === 'other') { genderText.classList.remove('hidden'); genderText.required = true; }
-    else { genderText.classList.add('hidden'); genderText.required = false; genderText.value=''; }
+/* 제출 상태 플래그 (iframe 초기 onload 무시) */
+let posting = false;
+
+/* ===== 2) 영상 시청 단계 ===== */
+function renderVideoStep(item, index, total){
+  stage.innerHTML = "";
+  const wrap = document.createElement('div'); wrap.className = 'video-wrap';
+
+  const header = document.createElement('div');
+  header.innerHTML = `<span class="badge">${index+1} / ${total}</span><b>${item.label}</b>`;
+
+  const v = document.createElement('video');
+  v.src = item.src; v.controls = true; v.playsInline = true; v.preload = 'metadata';
+
+  let lastAllowedTime = 0, watched = new Set(), duration = 0;
+  v.addEventListener('loadedmetadata', ()=>{ duration = v.duration || 0; });
+  v.addEventListener('seeking', ()=>{ if (v.currentTime > lastAllowedTime + 0.75) v.currentTime = lastAllowedTime; });
+  v.addEventListener('ratechange', ()=>{ if (v.playbackRate > 1.25) v.playbackRate = 1.25; });
+  document.addEventListener('visibilitychange', ()=>{ if (document.hidden && !v.paused) v.pause(); });
+
+  const progress = document.createElement('div'); progress.className='progress';
+  const bar = document.createElement('div'); progress.appendChild(bar);
+  const msg = document.createElement('div'); msg.className='dim'; msg.textContent='영상을 끝까지 시청해주세요.';
+  const nextBtn = document.createElement('button'); nextBtn.className='btn'; nextBtn.textContent='다음 (설문으로 이동)'; nextBtn.disabled = true;
+
+  v.addEventListener('timeupdate', ()=>{
+    lastAllowedTime = Math.max(lastAllowedTime, v.currentTime);
+    watched.add(Math.floor(v.currentTime));
+    if (duration > 0){
+      const ratio = Math.min(watched.size / Math.ceil(duration), 1);
+      bar.style.width = (ratio*100).toFixed(1) + '%';
+
+      const nearEnd = duration > 0 && (duration - lastAllowedTime) <= 2;
+      if (ratio >= WATCH_THRESHOLD || nearEnd){
+        nextBtn.disabled = false;
+        msg.className = 'ok';
+        msg.textContent = '시청 완료! 설문으로 이동할 수 있습니다.';
+      }
+    }
   });
 
-  // 단순 검증
-  function validate(){
-    const age = Number($('#age').value);
-    const g   = document.querySelector('input[name="gender"]:checked')?.value || '';
-    if (!Number.isFinite(age) || age < 14 || age > 100) return '나이는 14–100 사이여야 합니다.';
-    if (!g) return '성별을 선택해주세요.';
-    if (g === 'other' && genderText.value.trim().length === 0) return '기타 선택 시 상세를 입력해주세요.';
-    return '';
-  }
+  wrap.appendChild(header);
+  wrap.appendChild(v);
+  wrap.appendChild(progress);
+  wrap.appendChild(msg);
+  const foot = document.createElement('div'); foot.className='row';
+  foot.appendChild(nextBtn); wrap.appendChild(foot);
+  stage.appendChild(wrap);
 
-  // 중복 제출 방지(기기 단위)
-  if (localStorage.getItem('demographic_submitted') === '1') {
-    btn.disabled = true;
-    msg.textContent = '이미 제출한 것으로 감지되었습니다.';
-    msg.className = 'err';
-  }
+  nextBtn.addEventListener('click', ()=> renderSurveyStep(item, index));
+}
 
-  // 다른 스크립트가 submit을 가로채지 못하도록 onsubmit 경로 고정
-  window.__posting = false;
-  window.__safeSubmit = function(ev){
-    const err = validate();
-    if (err){
-      ev.preventDefault();
-      msg.textContent = err; msg.className = 'err';
-      return false;
+/* ===== 3) 설문 단계 ===== */
+const answers = {}; // { high:[..], low:[..] }
+function renderSurveyStep(item, index){
+  stage.innerHTML = "";
+  const formEl = document.createElement('form'); formEl.className='card';
+  const title = document.createElement('div');
+  title.innerHTML = `<span class="badge">${index+1} / ${order.length}</span><b>${item.label} — 설문</b>`;
+  formEl.appendChild(title);
+
+  questions.forEach((q,i)=>{
+    const block = document.createElement('div'); block.className='q';
+    const id = `${item.id}_q${i}`;
+    block.innerHTML = `<div>${q}</div>`;
+    const likert = document.createElement('div'); likert.className='likert';
+    for (let v=1; v<=5; v++){
+      const lab = document.createElement('label');
+      lab.innerHTML = `<input type="radio" name="${id}" value="${v}" required> ${v}`;
+      likert.appendChild(lab);
     }
-    if (localStorage.getItem('demographic_submitted') === '1'){
-      ev.preventDefault();
-      msg.textContent = '이미 제출한 것으로 감지되었습니다.'; msg.className = 'err';
-      return false;
-    }
-    window.__posting = true;
-    btn.disabled = true;
-    msg.textContent = '제출 중...'; msg.className = 'info';
-    // return true → 브라우저 기본 제출(iframe POST) 진행
-    return true;
+    block.appendChild(likert);
+    formEl.appendChild(block);
+  });
+
+  const footer = document.createElement('div'); footer.className='row';
+  const backBtn = document.createElement('button'); backBtn.type='button'; backBtn.className='btn'; backBtn.textContent='이전 (영상 다시 보기)';
+  const nextBtn = document.createElement('button'); nextBtn.type='submit'; nextBtn.className='btn';
+  nextBtn.textContent = (index === order.length-1) ? '최종 제출' : '다음 영상으로';
+  footer.appendChild(backBtn); footer.appendChild(nextBtn); formEl.appendChild(footer);
+
+  formEl.addEventListener('submit', e=>{
+    e.preventDefault();
+    const vals = []; let ok = true;
+    questions.forEach((_,i)=>{
+      const r = formEl.querySelector(`input[name="${item.id}_q${i}"]:checked`);
+      if(!r) ok=false; else vals.push(Number(r.value));
+    });
+    if(!ok) return alert('모든 문항에 응답해주세요.');
+    answers[item.id] = vals;
+    if (index === order.length-1) submitAll(); else renderVideoStep(order[index+1], index+1, order.length);
+  });
+
+  backBtn.addEventListener('click', ()=> renderVideoStep(item, index, order.length));
+  stage.appendChild(formEl);
+}
+
+/* ===== 4) 제출: hidden form + iframe ===== */
+function submitAll(){
+  const payload = {
+    sessionId,
+    userAgent: navigator.userAgent,
+    order: order.map(o=>o.id),
+    answers,
+    timestamp: new Date().toISOString()
   };
 
-  // iframe이 로드되면 제출 완료로 처리
-  sink.addEventListener('load', () => {
-    if (!window.__posting) return; // 초기 로드 무시
-    window.__posting = false;
-    localStorage.setItem('demographic_submitted','1');
-    msg.textContent = '제출이 완료되었습니다.'; msg.className = 'ok';
-    form.reset();
-    btn.disabled = true; // 재제출 방지(원하면 제거)
-    // 다음 페이지로 넘기려면 아래 주석 해제
-    // location.href = './next.html';
-  });
-})();
+  // 폼에 JSON 문자열을 data= 로 채워서 POST (헤더 지정 없음)
+  payloadInput.value = JSON.stringify(payload);
+
+  // onload 처리용 플래그
+  posting = true;
+
+  // 전송
+  form.submit();
+
+  // UI 상태 표시
+  stage.innerHTML = '<div class="card"><p>제출 중…</p><p class="dim">창을 닫지 말고 잠시만 기다려주세요.</p></div>';
+}
+
+/* iframe 로드 → 제출 완료 처리 */
+sink.addEventListener('load', () => {
+  if (!posting) return;   // 초기 로드 무시
+  posting = false;
+  stage.innerHTML = `<div class="card">
+    <p class="ok">제출이 완료되었습니다. 감사합니다!</p>
+    <div class="dim">응답이 스프레드시트에 저장되었습니다.</div>
+  </div>`;
+});
+
+/* ===== 5) 시작: 순서 랜덤 후 1번 영상부터 ===== */
+const order = shuffle(videos.slice());
+renderVideoStep(order[0], 0, order.length);
 </script>
 </body>
 </html>
