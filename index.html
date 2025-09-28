@@ -80,10 +80,7 @@ function renderVideoStep(item, index, total){
     if (duration > 0){
       const ratio = Math.min(watched.size / Math.ceil(duration), 1);
       bar.style.width = (ratio*100).toFixed(1) + '%';
-
-      // nearEnd 허용 (사용자 경험 개선)
-      const nearEnd = duration > 0 && (duration - lastAllowedTime) <= 2;
-
+      const nearEnd = duration > 0 && (duration - lastAllowedTime) <= 2; // 막판 2초 허용
       if (ratio >= WATCH_THRESHOLD || nearEnd){
         nextBtn.disabled = false;
         msg.className = 'ok';
@@ -148,7 +145,7 @@ function renderSurveyStep(item, index){
   stage.appendChild(form);
 }
 
-/* ===== 4) 제출(Apps Script로 POST) ===== */
+/* ===== 4) 제출: beacon → (실패 시) no-cors fetch ===== */
 async function submitAll(){
   const payload = {
     sessionId,
@@ -157,26 +154,49 @@ async function submitAll(){
     answers,
     timestamp: new Date().toISOString()
   };
-  stage.innerHTML = '<p>제출 중…</p>';
-  try{
-    // ★ preflight 회피: 폼 인코딩 + data= 에 JSON 문자열
-    const res = await fetch(WEB_APP_URL, {
-      method:'POST',
-      headers:{
-        'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'
-      },
-      body: 'data=' + encodeURIComponent(JSON.stringify(payload))
-    });
 
-    if (!res.ok) {
-      const txt = await res.text().catch(()=> '');
-      throw new Error(`서버 오류 (status ${res.status}) ${txt}`);
+  stage.innerHTML = '<p>제출 중…</p>';
+
+  try {
+    let sent = false;
+
+    // 1) 가장 안정적인 전송: sendBeacon (응답을 읽지 않아도 됨)
+    if ('sendBeacon' in navigator) {
+      const fd = new FormData();
+      fd.append('data', JSON.stringify(payload));
+      sent = navigator.sendBeacon(WEB_APP_URL, fd);
     }
 
-    // Apps Script가 JSON 응답을 줌
-    const data = await res.json().catch(() => ({}));
-    stage.innerHTML = `<div class="card"><p class="ok">제출이 완료되었습니다. 감사합니다!</p><div class="dim">응답 ID: ${data.id || '—'}</div></div>`;
-  }catch(err){
+    // 2) beacon 미지원/거부 시: no-cors fetch (응답 읽기 불가하지만 전송됨)
+    if (!sent) {
+      await fetch(WEB_APP_URL, {
+        method: 'POST',
+        mode: 'no-cors', // 응답은 opaque로 돌아옴
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: 'data=' + encodeURIComponent(JSON.stringify(payload))
+      });
+      sent = true;
+    }
+
+    if (sent) {
+      stage.innerHTML = `
+        <div class="card">
+          <p class="ok">제출 요청을 보냈습니다. 감사합니다!</p>
+          <div class="dim">네트워크/브라우저 정책에 따라 응답을 읽지 못할 수 있으나, 서버로는 전송되었습니다.</div>
+          <div class="row" style="margin-top:8px">
+            <button class="btn" id="retryBtn">다시 제출</button>
+          </div>
+        </div>`;
+      const retryBtn = document.getElementById('retryBtn');
+      retryBtn.addEventListener('click', (e)=>{
+        e.preventDefault();
+        submitAll(); // 중복 제출이 걱정되면 sessionId를 유지하므로 서버에서 구분 가능
+      });
+      return;
+    }
+
+    throw new Error('전송 실패');
+  } catch (err) {
     stage.innerHTML = `<div class="card"><p class="warn">제출 중 오류가 발생했습니다. 인터넷 연결을 확인하고 다시 시도해주세요.</p><pre class="dim" style="white-space:pre-wrap">${String(err)}</pre></div>`;
   }
 }
