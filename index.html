@@ -43,8 +43,8 @@
 /* ===== 0) 설정 ===== */
 const WATCH_THRESHOLD = 0.98; // 98% 이상 시청해야 완료 처리
 const videos = [
-  { id: "high", label: "영상 A", src: "https://www.dropbox.com/scl/fi/bbmr9chryaiwrgbg64biz/high_originality.mp4?rlkey=6pn4584iwg7as5y89aht7k5ys&st=a49pald0&raw=1" },
-  { id: "low",  label: "영상 B", src: "https://www.dropbox.com/scl/fi/gpd95qhvwid3xxv9hbyur/low_originality.mp4?rlkey=1wvalrivbwtd6v95onarxlf5b&st=ow4mi1xb&raw=1" }
+  { id: "high", label: "영상 A", src: "https://raw.githubusercontent.com/theOrd1997/ad-experiment/main/high_originality.mp4" },
+  { id: "low",  label: "영상 B", src: "https://raw.githubusercontent.com/theOrd1997/ad-experiment/main/low_originality.mp4" }
 ];
 const questions = [
   "이 광고는 전반적으로 잘 만들어졌다.",
@@ -52,6 +52,7 @@ const questions = [
   "이 광고는 브랜드와 잘 어울린다.",
   "이 광고는 시각적 완성도가 높다."
 ];
+</script>
 
 /* ===== 1) 유틸 ===== */
 const shuffle = arr => arr.map(v=>[Math.random(),v]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]);
