@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>광고 영상 시청 반응 설문 </title>
+<title>광고 영상 시청 반응 설문</title>
 <style>
   :root { --gap: 14px; }
   body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; line-height: 1.6; margin: 24px auto; max-width: 860px; padding: 0 16px; }
@@ -80,7 +80,11 @@ function renderVideoStep(item, index, total){
     if (duration > 0){
       const ratio = Math.min(watched.size / Math.ceil(duration), 1);
       bar.style.width = (ratio*100).toFixed(1) + '%';
-      if (ratio >= WATCH_THRESHOLD){
+
+      // nearEnd 허용 (사용자 경험 개선)
+      const nearEnd = duration > 0 && (duration - lastAllowedTime) <= 2;
+
+      if (ratio >= WATCH_THRESHOLD || nearEnd){
         nextBtn.disabled = false;
         msg.className = 'ok';
         msg.textContent = '시청 완료! 설문으로 이동할 수 있습니다.';
@@ -155,16 +159,25 @@ async function submitAll(){
   };
   stage.innerHTML = '<p>제출 중…</p>';
   try{
+    // ★ preflight 회피: 폼 인코딩 + data= 에 JSON 문자열
     const res = await fetch(WEB_APP_URL, {
       method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(payload)
+      headers:{
+        'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'
+      },
+      body: 'data=' + encodeURIComponent(JSON.stringify(payload))
     });
-    if (!res.ok) throw new Error('서버 오류');
-    const data = await res.json();
+
+    if (!res.ok) {
+      const txt = await res.text().catch(()=> '');
+      throw new Error(`서버 오류 (status ${res.status}) ${txt}`);
+    }
+
+    // Apps Script가 JSON 응답을 줌
+    const data = await res.json().catch(() => ({}));
     stage.innerHTML = `<div class="card"><p class="ok">제출이 완료되었습니다. 감사합니다!</p><div class="dim">응답 ID: ${data.id || '—'}</div></div>`;
   }catch(err){
-    stage.innerHTML = `<div class="card"><p class="warn">제출 중 오류가 발생했습니다. 인터넷 연결을 확인하고 다시 시도해주세요.</p></div>`;
+    stage.innerHTML = `<div class="card"><p class="warn">제출 중 오류가 발생했습니다. 인터넷 연결을 확인하고 다시 시도해주세요.</p><pre class="dim" style="white-space:pre-wrap">${String(err)}</pre></div>`;
   }
 }
 
