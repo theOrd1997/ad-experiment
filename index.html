@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>광고 영상 시청 반응 설문</title>
 
-<!-- 캐시 무력화 권장(정적 호스팅 시 구버전 잔존 방지) -->
+<!-- 캐시 무력화(정적 호스팅 시 구버전 잔존 방지) -->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
@@ -30,8 +30,37 @@
   .btn[disabled]{opacity:.5;cursor:not-allowed}
   .row{display:grid;gap:8px;grid-auto-flow:column;justify-content:start}
   .q{margin:14px 0}
-  .likert{display:flex;gap:10px;flex-wrap:wrap}
-  .likert label{border:1px solid var(--line);padding:6px 10px;border-radius:8px;cursor:pointer}
+
+  /* Likert: 5칸 그리드 정렬 + 앵커 라인 */
+  .likert{
+    display:grid;
+    grid-template-columns: repeat(5, minmax(44px, 1fr));
+    gap:10px;
+    align-items:center;
+  }
+  .likert label{
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    border:1px solid var(--line);
+    padding:8px 10px;
+    border-radius:8px;
+    cursor:pointer;
+    user-select:none;
+    width:100%;
+  }
+  .likert input[type="radio"]{ margin-right:6px; }
+
+  .likert-legend{
+    display:grid;
+    grid-template-columns: repeat(5, minmax(44px, 1fr));
+    gap:10px;
+    font-size:.86rem;
+    color:var(--muted);
+    margin-top:6px;
+  }
+  .likert-legend span{ text-align:center; }
+
   .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 </style>
 </head>
@@ -57,10 +86,10 @@
 /* =========================
  * 0) 설정 & 상수
  * ========================= */
-const WATCH_THRESHOLD = 0.98;               // 시청률 기준
-const SEEK_TOLERANCE = 0.75;                // 초 단위: 강제 점프 허용치
-const MAX_PLAYBACK = 1.25;                  // 배속 제한
-const SUBMIT_TIMEOUT_MS = 10_000;           // 제출 대기 타임아웃
+const WATCH_THRESHOLD = 0.98;   // 시청률 기준
+const SEEK_TOLERANCE = 0.75;    // 초 단위: 강제 점프 허용치
+const MAX_PLAYBACK = 1.25;      // 배속 제한
+const SUBMIT_TIMEOUT_MS = 10_000;
 
 const videos = [
   { id: "high", label: "영상 A", src: "https://raw.githubusercontent.com/theOrd1997/ad-experiment/main/high_originality.mp4" },
@@ -89,7 +118,6 @@ const sessionId = (crypto?.getRandomValues)
   ? crypto.getRandomValues(new Uint32Array(4)).join('-')
   : String(Date.now());
 
-// Fisher–Yates 셔플
 function shuffleInPlace(arr){
   for(let i = arr.length - 1; i > 0; i--){
     const j = Math.floor(Math.random() * (i + 1));
@@ -98,7 +126,6 @@ function shuffleInPlace(arr){
   return arr;
 }
 
-// element 생성 헬퍼
 function el(tag, props={}, children=[]){
   const node = document.createElement(tag);
   Object.assign(node, props);
@@ -113,71 +140,47 @@ function el(tag, props={}, children=[]){
  * 2) 상태
  * ========================= */
 const order = shuffleInPlace(videos.slice());
-const answers = {};               // { high:[..], low:[..] }
-let posting = false;              // 제출 중 플래그
-let submitTimer = null;           // 타임아웃 핸들
-let stepAbort = null;             // 단계별 이벤트 정리용 AbortController
+const answers = {};               // { high:[..6], low:[..6] }
+let posting = false;
+let submitTimer = null;
+let stepAbort = null;
 
 /* =========================
  * 3) 단계 렌더러
  * ========================= */
 function renderVideoStep(item, index, total){
-  // 이전 단계 이벤트 정리
   stepAbort?.abort();
   stepAbort = new AbortController();
 
   $stage.innerHTML = '';
   const header = el('div', { innerHTML: `<span class="badge">${index+1} / ${total}</span><b>${item.label}</b>` });
 
-  const v = el('video', {
-    src: item.src, controls: true, playsInline: true, preload: 'metadata'
-  });
+  const v = el('video', { src:item.src, controls:true, playsInline:true, preload:'metadata' });
 
   const progBar = el('div', { className:'progress', role:'progressbar', 'aria-valuemin':0, 'aria-valuemax':100 });
   const barFill = el('div'); progBar.appendChild(barFill);
   const msg = el('div', { className:'dim', textContent:'영상을 끝까지 시청해주세요.' });
   const nextBtn = el('button', { className:'btn', textContent:'다음 (설문으로 이동)', disabled:true });
 
-  // 시청 추적
   let lastAllowed = 0;
   let duration = 0;
   const watchedSeconds = new Set();
 
-  v.addEventListener('loadedmetadata', ()=>{
-    duration = Math.max(0, v.duration || 0);
-  }, { signal: stepAbort.signal });
-
-  v.addEventListener('seeking', ()=>{
-    if (v.currentTime > lastAllowed + SEEK_TOLERANCE){
-      v.currentTime = lastAllowed;
-    }
-  }, { signal: stepAbort.signal });
-
-  v.addEventListener('ratechange', ()=>{
-    if (v.playbackRate > MAX_PLAYBACK) v.playbackRate = MAX_PLAYBACK;
-  }, { signal: stepAbort.signal });
-
-  document.addEventListener('visibilitychange', ()=>{
-    if (document.hidden && !v.paused) v.pause();
-  }, { signal: stepAbort.signal });
-
-  v.addEventListener('error', ()=>{
-    msg.className = 'warn';
-    msg.textContent = '영상을 불러오지 못했습니다. 네트워크 상태를 확인한 뒤 새로고침 해주세요.';
-  }, { signal: stepAbort.signal });
+  v.addEventListener('loadedmetadata', ()=>{ duration = Math.max(0, v.duration || 0); }, { signal: stepAbort.signal });
+  v.addEventListener('seeking', ()=>{ if (v.currentTime > lastAllowed + SEEK_TOLERANCE) v.currentTime = lastAllowed; }, { signal: stepAbort.signal });
+  v.addEventListener('ratechange', ()=>{ if (v.playbackRate > MAX_PLAYBACK) v.playbackRate = MAX_PLAYBACK; }, { signal: stepAbort.signal });
+  document.addEventListener('visibilitychange', ()=>{ if (document.hidden && !v.paused) v.pause(); }, { signal: stepAbort.signal });
+  v.addEventListener('error', ()=>{ msg.className='warn'; msg.textContent='영상을 불러오지 못했습니다. 네트워크 상태를 확인한 뒤 새로고침 해주세요.'; }, { signal: stepAbort.signal });
 
   v.addEventListener('timeupdate', ()=>{
     lastAllowed = Math.max(lastAllowed, v.currentTime);
     watchedSeconds.add(Math.floor(v.currentTime));
-
     if (duration > 0){
-      // 분모 반올림 보정(메타데이터 부정확성 완화)
       const denom = Math.max(1, Math.round(duration));
       const ratio = Math.min(watchedSeconds.size / denom, 1);
       const pct = Math.round(ratio * 100);
       barFill.style.width = pct + '%';
       progBar.setAttribute('aria-valuenow', String(pct));
-
       const nearEnd = (duration - lastAllowed) <= 2;
       if (ratio >= WATCH_THRESHOLD || nearEnd){
         nextBtn.disabled = false;
@@ -187,15 +190,9 @@ function renderVideoStep(item, index, total){
     }
   }, { signal: stepAbort.signal });
 
-  nextBtn.addEventListener('click', ()=>{
-    renderSurveyStep(item, index);
-  }, { signal: stepAbort.signal });
+  nextBtn.addEventListener('click', ()=>{ renderSurveyStep(item, index); }, { signal: stepAbort.signal });
 
-  const wrap = el('div', { className:'video-wrap' }, [
-    header, v, progBar, msg,
-    el('div', { className:'row' }, [nextBtn])
-  ]);
-
+  const wrap = el('div', { className:'video-wrap' }, [header, v, progBar, msg, el('div', { className:'row' }, [nextBtn])]);
   $stage.appendChild(wrap);
 }
 
@@ -205,7 +202,6 @@ function renderSurveyStep(item, index){
 
   $stage.innerHTML = '';
   const formEl = el('form', { className:'card' });
-
   const title = el('div', { innerHTML: `<span class="badge">${index+1} / ${order.length}</span><b>${item.label} — 설문</b>` });
   formEl.appendChild(title);
 
@@ -214,32 +210,38 @@ function renderSurveyStep(item, index){
     const block = el('div', { className:'q' });
     block.appendChild(el('div', { textContent: q }));
 
+    // 리커트 (1~5)
     const likert = el('div', { className:'likert' });
+    const ariaMap = {1:'전혀 아니다',2:'',3:'보통이다',4:'',5:'매우 그렇다'};
     for (let v=1; v<=5; v++){
       const inputId = `${name}_${v}`;
       const input = el('input', {
-        type:'radio',
-        id: inputId,
-        name,
-        value: String(v),
-        // 그룹 중 하나만 required면 HTML5 유효성 검사 통과
-        required: (v === 1)
+        type:'radio', id:inputId, name, value:String(v),
+        'aria-label': ariaMap[v] ? `${v} (${ariaMap[v]})` : String(v),
+        required: (v === 1) // 그룹 내 하나만 required면 유효성 검사 동작
       });
-      // 라벨로 감싸 클릭영역↑ 접근성↑
-      const label = el('label', { htmlFor: inputId });
+      const label = el('label');
       label.appendChild(input);
       label.appendChild(document.createTextNode(` ${v}`));
       likert.appendChild(label);
     }
     block.appendChild(likert);
+
+    // 1/3/5 앵커 텍스트
+    const legend = el('div', { className:'likert-legend' }, [
+      el('span', { textContent:'1 전혀 아니다' }),
+      el('span', { textContent:'' }),
+      el('span', { textContent:'3 보통이다' }),
+      el('span', { textContent:'' }),
+      el('span', { textContent:'5 매우 그렇다' })
+    ]);
+    block.appendChild(legend);
+
     formEl.appendChild(block);
   });
 
   const backBtn = el('button', { type:'button', className:'btn', textContent:'이전 (영상 다시 보기)' });
-  const nextBtn = el('button', { type:'submit', className:'btn',
-    textContent: (index === order.length - 1) ? '최종 제출' : '다음 영상으로'
-  });
-
+  const nextBtn = el('button', { type:'submit', className:'btn', textContent:(index === order.length - 1) ? '최종 제출' : '다음 영상으로' });
   formEl.appendChild(el('div', { className:'row' }, [backBtn, nextBtn]));
 
   formEl.addEventListener('submit', (e)=>{
@@ -249,30 +251,20 @@ function renderSurveyStep(item, index){
 
     questions.forEach((_,i)=>{
       const picked = formEl.querySelector(`input[name="${item.id}_q${i}"]:checked`);
-      if (!picked) ok = false;
-      else vals.push(Number(picked.value));
+      if (!picked) ok = false; else vals.push(Number(picked.value));
     });
 
-    if (!ok){
-      alert('모든 문항에 응답해주세요.');
-      return;
-    }
+    if (!ok){ alert('모든 문항에 응답해주세요.'); return; }
 
-    // 🔎 디버그: 제출 직전 길이 확인(1~2회 점검 후 주석 처리해도 됩니다)
+    // 디버그: 제출 직전 6개 수집 확인
     console.log(`${item.id} answers length =`, vals.length, vals);
 
     answers[item.id] = vals;
-
-    if (index === order.length - 1){
-      submitAll();
-    } else {
-      renderVideoStep(order[index+1], index+1, order.length);
-    }
+    if (index === order.length - 1) submitAll();
+    else renderVideoStep(order[index+1], index+1, order.length);
   }, { signal: stepAbort.signal });
 
-  backBtn.addEventListener('click', ()=>{
-    renderVideoStep(item, index, order.length);
-  }, { signal: stepAbort.signal });
+  backBtn.addEventListener('click', ()=>{ renderVideoStep(item, index, order.length); }, { signal: stepAbort.signal });
 
   $stage.appendChild(formEl);
 }
@@ -281,7 +273,7 @@ function renderSurveyStep(item, index){
  * 4) 제출 로직 (hidden form + iframe)
  * ========================= */
 function submitAll(){
-  if (posting) return; // 이중 제출 방지
+  if (posting) return;
   posting = true;
 
   const payload = {
@@ -294,7 +286,6 @@ function submitAll(){
 
   $payload.value = JSON.stringify(payload);
 
-  // UI: 진행중
   $stage.innerHTML = `
     <div class="card">
       <p>제출 중…</p>
@@ -302,7 +293,6 @@ function submitAll(){
     </div>
   `;
 
-  // 폴백 타임아웃
   submitTimer = setTimeout(()=>{
     if (!posting) return;
     posting = false;
@@ -319,7 +309,7 @@ function submitAll(){
 
 // iframe onload → 성공 처리
 $sink.addEventListener('load', ()=>{
-  if (!posting) return;               // 초기 onload 무시
+  if (!posting) return;
   posting = false;
   clearTimeout(submitTimer);
   $stage.innerHTML = `
