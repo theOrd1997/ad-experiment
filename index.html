@@ -13,6 +13,8 @@
 <style>
   :root{
     --gap:14px; --fg:#222; --muted:#666; --line:#e5e7eb; --ok:#0a7c0a; --warn:#b00; --brand:#111;
+    --pill:#f6f7fb; --pill-border:#d9ddea; --pill-checked:#111; --pill-checked-fg:#fff;
+    --focus:#3b82f6;
   }
   html,body{margin:0;padding:0;background:#fff;color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;line-height:1.6}
   .wrap{max-width:860px;margin:24px auto;padding:0 16px}
@@ -26,42 +28,77 @@
   .progress>div{height:100%;background:#2f6;width:0%;transition:width .2s}
   .ok{color:var(--ok)}
   .warn{color:var(--warn)}
-  .btn{cursor:pointer;border:0;padding:10px 14px;border-radius:10px;background:var(--brand);color:#fff;font-weight:600}
+  .btn{cursor:pointer;border:0;padding:12px 16px;border-radius:12px;background:var(--brand);color:#fff;font-weight:700}
   .btn[disabled]{opacity:.5;cursor:not-allowed}
   .row{display:grid;gap:8px;grid-auto-flow:column;justify-content:start}
-  .q{margin:14px 0}
+  .q{margin:16px 0}
 
-  /* Likert: 5칸 그리드 정렬 + 앵커 라인 */
+  /* ===== Likert (모바일 친화 + 터치 타깃 확대) ===== */
+  .likert-wrap{margin-top:8px}
   .likert{
     display:grid;
-    grid-template-columns: repeat(5, minmax(44px, 1fr));
+    grid-template-columns: repeat(5, minmax(54px, 1fr));
     gap:10px;
-    align-items:center;
-  }
-  .likert label{
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    border:1px solid var(--line);
-    padding:8px 10px;
-    border-radius:8px;
-    cursor:pointer;
+    align-items:stretch;
     user-select:none;
-    width:100%;
+    /* 아주 작은 화면에서 좌우 스크롤 허용 */
+    overflow-x:auto;
+    padding-bottom:4px;
+    scroll-snap-type:x mandatory;
   }
-  .likert input[type="radio"]{ margin-right:6px; }
+  /* 내부 그리드는 최소 너비 보장 → 320px 이하에서도 스크롤 복원력 좋음 */
+  .likert-inner{
+    display:contents; /* grid 그대로 상속 */
+    min-width: 340px;
+  }
+  .pill{
+    display:flex; align-items:center; justify-content:center;
+    border:1px solid var(--pill-border);
+    background:var(--pill);
+    color:#111; font-weight:600;
+    border-radius:12px; padding:12px 10px;
+    scroll-snap-align:center;
+    position:relative;
+    min-height:44px; /* 터치 타깃 */
+    transition:transform .08s ease, box-shadow .08s ease, background .12s ease;
+  }
+  .pill:hover{box-shadow:0 1px 4px rgba(0,0,0,.06)}
+  .pill:active{transform:scale(.98)}
+  .pill input[type="radio"]{
+    position:absolute; inset:0; opacity:0; cursor:pointer;
+  }
+  /* checked 스타일: :has()는 최신 모바일/데스크톱 대부분 지원 */
+  .pill:has(input:checked){
+    background:var(--pill-checked);
+    color:var(--pill-checked-fg);
+    border-color:var(--pill-checked);
+  }
+  .pill:has(input:focus-visible){
+    outline:2px solid var(--focus); outline-offset:2px;
+  }
 
+  /* 보조 앵커 텍스트 (1·3·5) */
   .likert-legend{
-    display:grid;
-    grid-template-columns: repeat(5, minmax(44px, 1fr));
-    gap:10px;
-    font-size:.86rem;
-    color:var(--muted);
-    margin-top:6px;
+    display:grid; grid-template-columns: repeat(5, minmax(44px, 1fr)); gap:10px;
+    font-size:.86rem; color:var(--muted); margin-top:6px;
   }
-  .likert-legend span{ text-align:center; }
+  .likert-legend span{text-align:center}
 
-  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  /* 좁은 화면: 글자 줄임/간격 조정 */
+  @media (max-width: 420px){
+    .wrap{padding:0 12px}
+    .btn{padding:11px 14px; border-radius:10px}
+    .pill{padding:11px 8px; font-weight:700}
+    .likert-legend{font-size:.8rem}
+  }
+
+  /* 설문 블록 세부 타이포(가독성) */
+  .q-title{font-weight:700; line-height:1.5}
+  .q-hint{color:var(--muted); font-size:.92rem; margin-top:4px}
+
+  /* 섹션 푸터(버튼 영역) 고정 안전 여백 */
+  .actions{position:sticky; bottom:0; background:#fff; padding-top:12px}
+  .actions::before{content:""; display:block; height:1px; background:var(--line); margin-bottom:12px}
 </style>
 </head>
 <body>
@@ -208,24 +245,29 @@ function renderSurveyStep(item, index){
   questions.forEach((q,i)=>{
     const name = `${item.id}_q${i}`;
     const block = el('div', { className:'q' });
-    block.appendChild(el('div', { textContent: q }));
+    block.appendChild(el('div', { className:'q-title', textContent: q }));
 
-    // 리커트 (1~5)
+    // 리커트 (1~5) - 모바일 친화 pill 버튼
+    const likertWrap = el('div', { className:'likert-wrap' });
     const likert = el('div', { className:'likert' });
+    const inner = el('div', { className:'likert-inner' });
+
     const ariaMap = {1:'전혀 아니다',2:'',3:'보통이다',4:'',5:'매우 그렇다'};
     for (let v=1; v<=5; v++){
       const inputId = `${name}_${v}`;
+      const pill = el('label', { className:'pill', htmlFor: inputId });
       const input = el('input', {
         type:'radio', id:inputId, name, value:String(v),
         'aria-label': ariaMap[v] ? `${v} (${ariaMap[v]})` : String(v),
         required: (v === 1) // 그룹 내 하나만 required면 유효성 검사 동작
       });
-      const label = el('label');
-      label.appendChild(input);
-      label.appendChild(document.createTextNode(` ${v}`));
-      likert.appendChild(label);
+      pill.appendChild(input);
+      pill.appendChild(el('span', { textContent: String(v) }));
+      inner.appendChild(pill);
     }
-    block.appendChild(likert);
+    likert.appendChild(inner);
+    likertWrap.appendChild(likert);
+    block.appendChild(likertWrap);
 
     // 1/3/5 앵커 텍스트
     const legend = el('div', { className:'likert-legend' }, [
@@ -242,7 +284,8 @@ function renderSurveyStep(item, index){
 
   const backBtn = el('button', { type:'button', className:'btn', textContent:'이전 (영상 다시 보기)' });
   const nextBtn = el('button', { type:'submit', className:'btn', textContent:(index === order.length - 1) ? '최종 제출' : '다음 영상으로' });
-  formEl.appendChild(el('div', { className:'row' }, [backBtn, nextBtn]));
+  const actions = el('div', { className:'actions' }, [el('div', { className:'row' }, [backBtn, nextBtn])]);
+  formEl.appendChild(actions);
 
   formEl.addEventListener('submit', (e)=>{
     e.preventDefault();
